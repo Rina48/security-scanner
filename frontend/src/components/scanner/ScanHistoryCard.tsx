@@ -3,63 +3,112 @@ import {
   RISK_BADGE_CLASS,
   RISK_LEVEL_TR,
 } from "../../pages/scannerPageConstants";
+import type { HistoryStatus } from "../../pages/scannerPageTypes";
 import type { ScanResult } from "../../types";
 
 interface ScanHistoryCardProps {
   history: ScanResult[];
+  status: HistoryStatus;
+  errorMessage: string;
   onClearHistory: () => void;
+  onRetry: () => void;
   onSelectScan: (scan: ScanResult) => void;
 }
 
 export function ScanHistoryCard({
   history,
+  status,
+  errorMessage,
   onClearHistory,
+  onRetry,
   onSelectScan,
 }: ScanHistoryCardProps) {
   return (
-    <section className="card">
-      <div className="history-header">
-        <h2>Tarama Geçmişi</h2>
-        {history.length > 0 ? (
-          <button
-            type="button"
-            className="btn-secondary btn-clear-history"
-            onClick={onClearHistory}
-          >
-            Geçmişi Temizle
+    <section className="history-section" aria-labelledby="history-title">
+      <div className="section-heading history-heading">
+        <div>
+          <p className="eyebrow">Kayıtlar</p>
+          <h2 id="history-title">Tarama geçmişi</h2>
+        </div>
+        {status === "ready" && history.length > 0 ? (
+          <button type="button" className="btn-danger-quiet" onClick={onClearHistory}>
+            Geçmişi temizle
           </button>
         ) : null}
       </div>
-      {history.length === 0 ? (
-        <div className="history-empty">
-          <div className="history-empty-icon" aria-hidden="true">
-            📋
+
+      {status === "idle" ? (
+        <HistoryState
+          title="Geçmiş henüz yüklenmedi"
+          description="Kayıtları görmek için API bağlantısı kurun."
+        />
+      ) : null}
+
+      {status === "loading" ? (
+        <div className="history-loading" role="status" aria-live="polite">
+          <span className="activity-indicator" aria-hidden="true" />
+          <div>
+            <strong>Geçmiş yükleniyor</strong>
+            <p>Bağlantı doğrulanırken kayıtlar getiriliyor.</p>
           </div>
-          <p>
-            <strong>Henüz tarama yapılmadı</strong>
-          </p>
-          <p>Yukarıdaki formu doldurarak ilk taramanızı başlatın.</p>
         </div>
       ) : null}
-      <ul className="history-list">
-        {history.map((scan) => (
-          <li
-            key={scan.scanId}
-            className="history-item-clickable"
-            onClick={() => onSelectScan(scan)}
-            title="Raporu görüntülemek için tıkla"
-          >
-            <span>{new Date(scan.completedAt).toLocaleString("tr-TR")}</span>
-            <span>{scan.targetUrl}</span>
-            <span>{MODE_TR[scan.mode]}</span>
-            <span>
-              <span className={RISK_BADGE_CLASS[scan.executiveSummary?.riskLevel ?? "clean"]}>
-                {RISK_LEVEL_TR[scan.executiveSummary?.riskLevel ?? "clean"] ?? "-"}
-              </span>
-            </span>
-          </li>
-        ))}
-      </ul>
+
+      {status === "error" ? (
+        <div className="history-error" role="alert">
+          <div>
+            <strong>Geçmiş yüklenemedi</strong>
+            <p>{errorMessage}</p>
+          </div>
+          <button type="button" className="btn-secondary" onClick={onRetry}>
+            Yeniden dene
+          </button>
+        </div>
+      ) : null}
+
+      {status === "ready" && history.length === 0 ? (
+        <HistoryState
+          title="Henüz tarama kaydı yok"
+          description="Tamamlanan taramalar burada hedef, zaman, mod ve risk bilgisiyle görünür."
+        />
+      ) : null}
+
+      {status === "ready" && history.length > 0 ? (
+        <ul className="history-list">
+          {history.map((scan) => (
+            <li key={scan.scanId}>
+              <button
+                type="button"
+                className="history-item"
+                onClick={() => onSelectScan(scan)}
+                aria-label={`${scan.targetUrl} raporunu aç`}
+              >
+                <span className="history-main">
+                  <strong>{scan.targetUrl}</strong>
+                  <span>{new Date(scan.completedAt).toLocaleString("tr-TR")}</span>
+                </span>
+                <span className="history-mode">{MODE_TR[scan.mode]}</span>
+                <span className={RISK_BADGE_CLASS[scan.executiveSummary?.riskLevel ?? "clean"]}>
+                  <span className="risk-badge-mark" aria-hidden="true" />
+                  {RISK_LEVEL_TR[scan.executiveSummary?.riskLevel ?? "clean"] ?? "-"}
+                </span>
+                <span className="history-open" aria-hidden="true">
+                  Aç
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
+  );
+}
+
+function HistoryState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="history-empty">
+      <strong>{title}</strong>
+      <p>{description}</p>
+    </div>
   );
 }

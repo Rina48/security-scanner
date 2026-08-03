@@ -6,7 +6,10 @@ interface UrlScanFormProps {
   mode: ScanMode;
   credentialCheck: boolean;
   isRunning: boolean;
+  isConnected: boolean;
+  urlError: string;
   onTargetUrlChange: (value: string) => void;
+  onTargetUrlBlur: () => void;
   onModeChange: (mode: ScanMode) => void;
   onCredentialCheckChange: (value: boolean) => void;
   onSubmit: (event: FormEvent) => void;
@@ -17,70 +20,104 @@ export function UrlScanForm({
   mode,
   credentialCheck,
   isRunning,
+  isConnected,
+  urlError,
   onTargetUrlChange,
+  onTargetUrlBlur,
   onModeChange,
   onCredentialCheckChange,
   onSubmit,
 }: UrlScanFormProps) {
   return (
-    <>
-      <p className="lead">
-        Pasif tarama tüm hedefler için çalışır. Aktif testler yalnızca politika tarafından
-        izin verilen yerel/lab sunucularda çalışır.
-      </p>
-      <form className="scan-form" onSubmit={onSubmit}>
-        <label htmlFor="target-url">
-          Hedef URL
-          <input
-            id="target-url"
-            type="url"
-            required
-            value={targetUrl}
-            onChange={(e) => onTargetUrlChange(e.target.value)}
-            placeholder="https://hedef-adres.local"
-            disabled={isRunning}
-            autoComplete="url"
-          />
-        </label>
-        <label htmlFor="scan-mode">
-          Tarama modu
-          <select
-            id="scan-mode"
-            value={mode}
-            onChange={(e) => onModeChange(e.target.value as ScanMode)}
-            disabled={isRunning}
-          >
-            <option value="passive">Pasif</option>
-            <option value="active">Aktif (sadece yerel/lab)</option>
-          </select>
-        </label>
-        {mode === "active" ? (
+    <form className="scan-form" onSubmit={onSubmit} noValidate>
+      <div className="field-group">
+        <label htmlFor="target-url">Hedef URL</label>
+        <input
+          id="target-url"
+          type="url"
+          required
+          value={targetUrl}
+          onChange={(event) => onTargetUrlChange(event.target.value)}
+          onBlur={onTargetUrlBlur}
+          placeholder="https://hedef-adres.local"
+          disabled={isRunning}
+          autoComplete="url"
+          inputMode="url"
+          aria-invalid={Boolean(urlError)}
+          aria-describedby={urlError ? "target-url-error" : undefined}
+        />
+        {urlError ? (
+          <p id="target-url-error" className="field-error" role="alert">
+            {urlError}
+          </p>
+        ) : null}
+      </div>
+
+      <fieldset className="mode-fieldset" disabled={isRunning}>
+        <legend>Tarama türü</legend>
+        <div className="mode-options">
+          <label className={mode === "passive" ? "mode-option mode-option-selected" : "mode-option"}>
+            <input
+              type="radio"
+              name="scan-mode"
+              value="passive"
+              checked={mode === "passive"}
+              onChange={() => onModeChange("passive")}
+            />
+            <span>
+              <strong>Pasif tarama</strong>
+              <small>Yanıtı, başlıkları, çerezleri ve TLS bilgisini inceler.</small>
+            </span>
+          </label>
+          <label className={mode === "active" ? "mode-option mode-option-selected" : "mode-option"}>
+            <input
+              type="radio"
+              name="scan-mode"
+              value="active"
+              checked={mode === "active"}
+              onChange={() => onModeChange("active")}
+            />
+            <span>
+              <strong>Aktif tarama</strong>
+              <small>Yalnız sunucuda izin verilmiş local veya lab hedeflerine probe gönderir.</small>
+            </span>
+          </label>
+        </div>
+      </fieldset>
+
+      {mode === "active" ? (
+        <div className="active-scan-options">
+          <p className="boundary-note">
+            Aktif tarama sadece açıkça yetkilendirilmiş local veya lab hedeflerinde çalışır.
+          </p>
           <label className="checkbox-label">
             <input
               type="checkbox"
               checked={credentialCheck}
-              onChange={(e) => onCredentialCheckChange(e.target.checked)}
-              aria-describedby="credential-check-desc"
+              onChange={(event) => onCredentialCheckChange(event.target.checked)}
+              aria-describedby="credential-check-risk"
               disabled={isRunning}
             />
-            <span id="credential-check-desc">
-              Varsayılan kimlik bilgisi testi (admin/admin, root/root vb.) — sadece izinli hedeflerde
+            <span>
+              <strong>Varsayılan kimlik bilgilerini kontrol et</strong>
+              <small id="credential-check-risk">
+                Bu seçenek hesap kilidine veya kısa süreli yoğun isteğe yol açabilir.
+              </small>
             </span>
           </label>
-        ) : null}
-        {isRunning ? (
-          <div className="scan-loading" role="status" aria-live="polite" aria-busy="true">
-            <div className="scan-loading-bar">
-              <div className="scan-loading-bar-fill" />
-            </div>
-            <p className="scan-loading-text">Tarama yapılıyor — bu işlem birkaç dakika sürebilir…</p>
-          </div>
-        ) : (
-          <button type="submit" className="btn-primary">
-            Taramayı Başlat
-          </button>
-        )}
-      </form>
-    </>
+        </div>
+      ) : null}
+
+      <button
+        type="submit"
+        className="btn-primary"
+        disabled={isRunning || !isConnected}
+      >
+        {isRunning ? "Tarama sürüyor…" : "Taramayı başlat"}
+      </button>
+      {!isConnected ? (
+        <p className="submit-hint">Taramayı başlatmak için önce API bağlantısı kurun.</p>
+      ) : null}
+    </form>
   );
 }

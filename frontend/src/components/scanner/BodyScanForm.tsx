@@ -4,6 +4,7 @@ interface BodyScanFormProps {
   pasteLabel: string;
   pasteBody: string;
   isRunning: boolean;
+  isConnected: boolean;
   onPasteLabelChange: (value: string) => void;
   onPasteBodyChange: (value: string) => void;
   onSubmit: (event: FormEvent) => void;
@@ -14,49 +15,64 @@ export function BodyScanForm({
   pasteLabel,
   pasteBody,
   isRunning,
+  isConnected,
   onPasteLabelChange,
   onPasteBodyChange,
   onSubmit,
   onClear,
 }: BodyScanFormProps) {
   return (
-    <>
-      <p className="lead">
-        Kaydedilmiş bir HTTP yanıt gövdesini (HTML dump, hata sayfası, JSON çıktısı vb.)
-        yapıştırın ve herhangi bir ağ isteği atmadan çevrimdışı analiz edin.
+    <form className="scan-form" onSubmit={onSubmit}>
+      <p className="flow-description">
+        Kaydedilmiş HTML, JSON veya hata çıktısını ağ isteği göndermeden analiz edin.
       </p>
-      <form className="scan-form" onSubmit={onSubmit}>
-        <label>
-          Kaynak etiketi (isteğe bağlı)
-          <input
-            type="text"
-            value={pasteLabel}
-            onChange={(e) => onPasteLabelChange(e.target.value)}
-            placeholder="örn. https://example.com/hata veya debug-dump.txt"
-          />
-        </label>
-        <label>
-          Yanıt gövdesi
-          <textarea
-            required
-            rows={12}
-            value={pasteBody}
-            onChange={(e) => onPasteBodyChange(e.target.value)}
-            placeholder="HTTP yanıt gövdesini buraya yapıştırın..."
-            className="body-textarea"
-          />
-        </label>
-        <div className="body-actions">
-          <button type="submit" disabled={isRunning || !pasteBody.trim()}>
-            {isRunning ? "Analiz ediliyor..." : "Gövdeyi Analiz Et"}
+      <label htmlFor="source-label">
+        Kaynak etiketi <span className="optional-label">İsteğe bağlı</span>
+        <input
+          id="source-label"
+          type="text"
+          value={pasteLabel}
+          onChange={(event) => onPasteLabelChange(event.target.value)}
+          placeholder="Örneğin: debug-dump.txt"
+          disabled={isRunning}
+          maxLength={512}
+        />
+      </label>
+      <label htmlFor="response-body">
+        Yanıt gövdesi
+        <textarea
+          id="response-body"
+          required
+          rows={12}
+          value={pasteBody}
+          onChange={(event) => onPasteBodyChange(event.target.value)}
+          placeholder="HTTP yanıt gövdesini buraya yapıştırın…"
+          className="body-textarea"
+          disabled={isRunning}
+        />
+      </label>
+      <div className="form-actions">
+        <button
+          type="submit"
+          className="btn-primary"
+          disabled={isRunning || !isConnected || !pasteBody.trim()}
+        >
+          {isRunning ? "Analiz sürüyor…" : "Yanıtı analiz et"}
+        </button>
+        {pasteBody ? (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={onClear}
+            disabled={isRunning}
+          >
+            Alanları temizle
           </button>
-          {pasteBody ? (
-            <button type="button" className="btn-secondary" onClick={onClear}>
-              Temizle
-            </button>
-          ) : null}
-        </div>
-      </form>
-    </>
+        ) : null}
+      </div>
+      {!isConnected ? (
+        <p className="submit-hint">Analizi başlatmak için önce API bağlantısı kurun.</p>
+      ) : null}
+    </form>
   );
 }
