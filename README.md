@@ -96,9 +96,11 @@ Copy-Item agent\urls.example.txt agent\urls.txt
 
 ```powershell
 cd agent
-python -m pip install -r requirements.txt
+python -m pip install --require-hashes -r requirements.txt
 python agent.py
 ```
+
+`agent/requirements.in` doğrudan bağımlılıkları kesin sürümlerle tanımlar; `requirements.txt` ise temiz ve tekrarlanabilir kurulum için transitif bağımlılıkları SHA-256 hash'leriyle kilitler.
 
 Aktif moda geçmeden önce hedef hostname'lerini backend process ortamında `ALLOWED_ACTIVE_HOSTS` ile açıkça izinli hale getirin. Allowlist boşken aktif tarama reddedilir.
 
