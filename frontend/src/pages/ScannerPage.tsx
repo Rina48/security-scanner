@@ -178,8 +178,7 @@ export function ScannerPage() {
     persistPreferences({ credentialCheck: value });
   }
 
-  async function handleConnect(event: FormEvent): Promise<void> {
-    event.preventDefault();
+  async function handleConnect(): Promise<void> {
     if (connectionStatus === "connecting" || isRunning) return;
 
     const token = apiToken.trim();
@@ -434,7 +433,6 @@ export function ScannerPage() {
       </header>
 
       <ConnectionPanel
-        apiToken={apiToken}
         status={connectionStatus}
         tokenError={tokenError}
         disabled={isRunning}

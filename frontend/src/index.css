@@ -296,6 +296,38 @@ h4 {
   min-width: 0;
 }
 
+.token-input-control {
+  position: relative;
+  display: block;
+}
+
+.token-input-control input {
+  padding-right: 82px;
+}
+
+.token-input-masked {
+  -webkit-text-security: disc;
+}
+
+.btn-token-visibility {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  min-height: 36px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 6px 9px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.btn-token-visibility:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
 .connection-form .field-help,
 .connection-form .field-error {
   grid-column: 1 / -1;

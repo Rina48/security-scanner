@@ -1,4 +1,5 @@
-import type { FormEvent } from "react";
+import { useState } from "react";
+import type { KeyboardEvent } from "react";
 import type { ConnectionStatus } from "../../pages/scannerPageTypes";
 
 const CONNECTION_COPY: Record<
@@ -33,17 +34,15 @@ const CONNECTION_COPY: Record<
 };
 
 interface ConnectionPanelProps {
-  apiToken: string;
   status: ConnectionStatus;
   tokenError: string;
   disabled: boolean;
   onApiTokenChange: (value: string) => void;
-  onConnect: (event: FormEvent) => void;
+  onConnect: () => void;
   onDisconnect: () => void;
 }
 
 export function ConnectionPanel({
-  apiToken,
   status,
   tokenError,
   disabled,
@@ -51,9 +50,15 @@ export function ConnectionPanel({
   onConnect,
   onDisconnect,
 }: ConnectionPanelProps) {
+  const [isTokenVisible, setIsTokenVisible] = useState(false);
   const state = CONNECTION_COPY[status];
   const isConnected = status === "connected";
   const isConnecting = status === "connecting";
+
+  function connect(): void {
+    setIsTokenVisible(false);
+    onConnect();
+  }
 
   return (
     <section className="connection-panel" aria-labelledby="connection-title">
@@ -83,20 +88,39 @@ export function ConnectionPanel({
           </button>
         </div>
       ) : (
-        <form className="connection-form" onSubmit={onConnect} noValidate>
+        <div className="connection-form">
           <label htmlFor="api-token">
             API token
-            <input
-              id="api-token"
-              type="password"
-              value={apiToken}
-              onChange={(event) => onApiTokenChange(event.target.value)}
-              autoComplete="off"
-              placeholder="Tokenınızı girin"
-              aria-invalid={Boolean(tokenError)}
-              aria-describedby={tokenError ? "api-token-error api-token-help" : "api-token-help"}
-              disabled={isConnecting}
-            />
+            <span className="token-input-control">
+              <input
+                id="api-token"
+                className={isTokenVisible ? "token-input" : "token-input token-input-masked"}
+                type="text"
+                onChange={(event) => onApiTokenChange(event.target.value)}
+                onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+                  if (event.key !== "Enter" || isConnecting) return;
+                  event.preventDefault();
+                  connect();
+                }}
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="Tokenınızı girin"
+                aria-invalid={Boolean(tokenError)}
+                aria-describedby={tokenError ? "api-token-error api-token-help" : "api-token-help"}
+                disabled={isConnecting}
+              />
+              <button
+                type="button"
+                className="btn-token-visibility"
+                onClick={() => setIsTokenVisible((visible) => !visible)}
+                aria-label={isTokenVisible ? "API tokenını gizle" : "API tokenını göster"}
+                aria-pressed={isTokenVisible}
+                disabled={isConnecting}
+              >
+                {isTokenVisible ? "Gizle" : "Göster"}
+              </button>
+            </span>
           </label>
           <p id="api-token-help" className="field-help">
             Token tarayıcı depolamasına yazılmaz ve bağlantıdan sonra alanda gösterilmez.
@@ -107,13 +131,14 @@ export function ConnectionPanel({
             </p>
           ) : null}
           <button
-            type="submit"
+            type="button"
             className="btn-connect"
+            onClick={connect}
             disabled={isConnecting}
           >
             {isConnecting ? "Bağlanıyor…" : "Bağlan"}
           </button>
-        </form>
+        </div>
       )}
     </section>
   );
