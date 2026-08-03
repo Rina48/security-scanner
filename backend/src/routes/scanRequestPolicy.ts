@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { isActiveScanAllowed } from "../policy/targetPolicyGuard.js";
 import type { Environment } from "../security/serverConfig.js";
-import { severityEnum } from "./schemas.js";
+import { severityEnum, targetUrlSchema } from "./schemas.js";
 
 export const scanRequestSchema = z
   .object({
-    targetUrl: z.string().url(),
+    targetUrl: targetUrlSchema,
     mode: z.enum(["passive", "active"]),
     severityOverrides: z.record(z.string(), severityEnum).optional(),
     /** true ise tarama arka planda çalışır, 202 + scanId döner. */

@@ -1,5 +1,6 @@
 import type { ScannerFinding } from "../../types.js";
 import { isResourceLimitError } from "../../security/resourceLimits.js";
+import { logRedactedError } from "../../utils/safeLogging.js";
 import { abortError, throwIfAborted } from "../../utils/abort.js";
 import { fetchWithBypass } from "../../utils/wafBypass.js";
 import {
@@ -157,7 +158,7 @@ async function fetchBaselineBody(
   } catch (err) {
     if (signal?.aborted) throw abortError(signal);
     if (isResourceLimitError(err)) throw err;
-    console.error(`[localActiveScanner] ${method} baseline fetch failed:`, err);
+    logRedactedError(`[localActiveScanner] ${method} baseline fetch failed:`, err);
     return "";
   }
 }
@@ -200,7 +201,7 @@ async function probeSqli(
       } catch (err) {
         if (signal?.aborted) throw abortError(signal);
         if (isResourceLimitError(err)) throw err;
-        console.error(`[localActiveScanner] SQLi ${method} probe failed:`, err);
+        logRedactedError(`[localActiveScanner] SQLi ${method} probe failed:`, err);
       }
     }
   }
@@ -239,7 +240,7 @@ async function probeXss(
       } catch (err) {
         if (signal?.aborted) throw abortError(signal);
         if (isResourceLimitError(err)) throw err;
-        console.error(`[localActiveScanner] XSS ${method} probe failed:`, err);
+        logRedactedError(`[localActiveScanner] XSS ${method} probe failed:`, err);
       }
     }
   }

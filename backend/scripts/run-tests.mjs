@@ -9,6 +9,7 @@ const testFiles = await findTestFiles(resolve("dist"));
 ensureTestsDiscovered(testFiles);
 
 const result = spawnSync(process.execPath, ["--test", ...testFiles], {
+  env: { ...process.env, SECURITY_SCANNER_DB_PATH: ":memory:" },
   stdio: "inherit",
 });
 

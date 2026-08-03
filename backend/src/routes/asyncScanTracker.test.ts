@@ -130,3 +130,30 @@ test("TTL eski asenkron işi abort eder ve bellek kaydını siler", async () => 
   assert.equal(saveCalls, 0);
   tracker.dispose();
 });
+
+test("bekleyen asenkron iş API görünümünde hassas query değerini tutmaz", () => {
+  const querySecret = "synthetic-async-query-value-358";
+  const resources = createScanResourceManager(limits({ maxAsyncJobs: 1 }));
+  const tracker = createAsyncScanTracker(resources, {
+    runScan: async (_request, options) => new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener(
+        "abort",
+        () => reject(options.signal?.reason),
+        { once: true },
+      );
+    }),
+    saveScanResult: () => undefined,
+  });
+
+  const started = tracker.start({
+    targetUrl: `https://example.test/path?token=${querySecret}&page=2`,
+    mode: "passive",
+  });
+  const pending = tracker.get(started.scanId);
+
+  assert.ok(pending);
+  assert.equal(pending.targetUrl.includes(querySecret), false);
+  assert.match(pending.targetUrl, /token=REDACTED/);
+  assert.match(pending.targetUrl, /page=2/);
+  tracker.dispose();
+});

@@ -3,6 +3,7 @@ import { safeFetchText } from "../security/egressPolicy.js";
 import { isResourceLimitError } from "../security/resourceLimits.js";
 import { BROWSER_HEADERS } from "../utils/httpHeaders.js";
 import { throwIfAborted, withTimeoutSignal } from "../utils/abort.js";
+import { assertUrlHasNoUserInfo, maskSecrets } from "../utils/secretMasker.js";
 import { createScanReport } from "../reporting/reportGenerator.js";
 import { fetchRobotsPaths } from "../utils/robotsParser.js";
 import { INITIAL_FETCH_TIMEOUT_MS } from "./constants.js";
@@ -123,6 +124,7 @@ export async function runScan(
   scanRequest: ScanRequest,
   options: RunScanOptions = {},
 ): Promise<ScanResult> {
+  assertUrlHasNoUserInfo(scanRequest.targetUrl);
   const startedAt = new Date().toISOString();
   const canRunActive = isActiveScanAllowed(scanRequest.targetUrl, scanRequest.mode);
   if (scanRequest.mode === "active" && !canRunActive) {
@@ -205,7 +207,7 @@ export async function runScan(
     console.info(
       "[runScan] Aktif tarama politika:",
       {
-        targetUrl: scanRequest.targetUrl,
+        targetUrl: maskSecrets(scanRequest.targetUrl),
         credentialCheck: scanRequest.credentialCheck,
         canRunActive,
       }

@@ -13,6 +13,7 @@ import { isResourceLimitError } from "../security/resourceLimits.js";
 import { SHORT_PROBE_TIMEOUT_MS } from "../scanners/constants.js";
 import { abortError, throwIfAborted, withTimeoutSignal } from "./abort.js";
 import { BROWSER_HEADERS } from "./httpHeaders.js";
+import { logRedactedError } from "./safeLogging.js";
 
 export interface ScannerFetchOptions {
   method?: "GET" | "POST" | "HEAD" | "OPTIONS";
@@ -88,7 +89,7 @@ export async function scannerFetch(
   } catch (err: unknown) {
     if (signal?.aborted) throw abortError(signal);
     if (isResourceLimitError(err)) throw err;
-    console.error(`[${scope}] HTTP probe failed:`, err instanceof Error ? err.message : err);
+    logRedactedError(`[${scope}] HTTP probe failed:`, err);
     return {
       body: "",
       status: 0,

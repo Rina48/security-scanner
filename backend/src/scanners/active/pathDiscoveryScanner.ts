@@ -2,6 +2,7 @@ import type { ScannerFinding } from "../../types.js";
 import { isResourceLimitError } from "../../security/resourceLimits.js";
 import { abortError, throwIfAborted } from "../../utils/abort.js";
 import { fetchPathWithBypass } from "../../utils/wafBypass.js";
+import { logRedactedError } from "../../utils/safeLogging.js";
 import { PATH_DISCOVERY_CONCURRENCY } from "../constants.js";
 import { SENSITIVE_PATHS, type SensitivePath } from "./sensitivePaths.js";
 
@@ -29,7 +30,7 @@ async function checkPath(
   } catch (err: unknown) {
     if (signal?.aborted) throw abortError(signal);
     if (isResourceLimitError(err)) throw err;
-    console.error("[pathDiscoveryScanner] Path probe failed:", err);
+    logRedactedError("[pathDiscoveryScanner] Path probe failed:", err);
     return null;
   }
 }

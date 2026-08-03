@@ -15,6 +15,7 @@ import {
 import { withTimeoutSignal } from "../utils/abort.js";
 import { BROWSER_HEADERS } from "../utils/httpHeaders.js";
 import { sendResourceLimitResponse } from "./resourceLimitResponse.js";
+import { targetUrlSchema } from "./schemas.js";
 
 /**
  * Pentest yardımcı endpoint. Varsayılan olarak kayıt edilmez; etkin olduğunda
@@ -22,7 +23,7 @@ import { sendResourceLimitResponse } from "./resourceLimitResponse.js";
  */
 const probeSchema = z
   .object({
-    targetUrl: z.string().url(),
+    targetUrl: targetUrlSchema,
     method: z.enum(["GET", "POST", "HEAD"]).optional().default("GET"),
     body: z.string().max(1_000_000).optional(),
     contentType: z.string().max(256).optional(),

@@ -60,3 +60,28 @@ test("probe rotası ortak tarama rate limit'ini aşınca 429 döndürür", async
     message: "Çok fazla tarama isteği gönderildi. Daha sonra tekrar deneyin.",
   });
 });
+
+test("probe userinfo içeren URL'yi fetch çağrısından önce reddeder", async () => {
+  const userInfoSecret = "synthetic-probe-userinfo-value-247";
+  let fetchCalls = 0;
+  const handler = createProbeHandler(async () => {
+    fetchCalls += 1;
+    throw new Error("Fetch çağrılmamalı");
+  });
+  const { response, recorder } = createMockResponse();
+
+  await handler(
+    createMockRequest({
+      remoteAddress: "127.0.0.1",
+      body: {
+        targetUrl: `https://synthetic-user:${userInfoSecret}@example.test/path`,
+      },
+    }),
+    response,
+    (() => undefined) as NextFunction,
+  );
+
+  assert.equal(recorder.statusCode, 400);
+  assert.equal(fetchCalls, 0);
+  assert.equal(JSON.stringify(recorder.body).includes(userInfoSecret), false);
+});

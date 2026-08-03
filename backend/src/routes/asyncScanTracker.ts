@@ -7,6 +7,8 @@ import {
 import { saveScanResult } from "../storage/database.js";
 import type { ScanMode, ScanRequest } from "../types.js";
 import { isAbortError } from "../utils/abort.js";
+import { redactScanResult } from "../utils/reportRedaction.js";
+import { maskSecrets } from "../utils/secretMasker.js";
 
 export interface PendingScan {
   targetUrl: string;
@@ -86,7 +88,7 @@ export function createAsyncScanTracker(
       const startedAt = new Date(now()).toISOString();
       const controller = new AbortController();
       const job: TrackedScan = {
-        targetUrl: scanRequest.targetUrl,
+        targetUrl: maskSecrets(scanRequest.targetUrl),
         mode: scanRequest.mode,
         startedAt,
         status: "queued",
@@ -119,7 +121,7 @@ export function createAsyncScanTracker(
 
       void scheduledScan
         .then((report) => {
-          if (!controller.signal.aborted) saveResult(report);
+          if (!controller.signal.aborted) saveResult(redactScanResult(report));
         })
         .catch((error: unknown) => {
           if (!isAbortError(error, controller.signal)) {

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
 import type { Express, Request, Response } from "express";
+import { Headers } from "undici";
 import type { ScanResult } from "../types.js";
+import { runCookieScanner } from "../scanners/passive/cookieScanner.js";
 import {
   createScanResourceManager,
   DEFAULT_RESOURCE_LIMITS,
@@ -190,11 +192,67 @@ test("normal synchronous completion does not abort its request signal", async ()
   response.emit("close");
 
   assert.equal(capturedSignal?.aborted, false);
-  assert.equal(savedReport, report);
+  assert.deepEqual(savedReport, report);
   assert.equal(response.statusCode, 201);
-  assert.equal(response.body, report);
+  assert.deepEqual(response.body, report);
   assert.equal(request.listenerCount("aborted"), 0);
   assert.equal(response.listenerCount("close"), 0);
+});
+
+test("API cevabı ve kaydedilecek geçmiş tüm rapor alanlarını redact eder", async () => {
+  const cookieName = "random_api_cookie_9";
+  const cookieSecret = "synthetic-api-cookie-value-814";
+  const querySecret = "synthetic-api-query-value-925";
+  const cookieFinding = runCookieScanner(
+    new Headers({
+      "set-cookie": `${cookieName}=${cookieSecret}; Secure; SameSite=None; Path=/private`,
+    }),
+    `https://example.test/path?token=${querySecret}`,
+  )[0];
+  assert.ok(cookieFinding);
+
+  const report = completedReport();
+  report.targetUrl = `https://example.test/path?token=${querySecret}&page=2`;
+  report.findings = [{
+    ...cookieFinding,
+    title: `Finding password=${querySecret}`,
+    evidence: `${cookieFinding.evidence}\nsecret=${querySecret}`,
+    remediation: `Use https://example.test/help?api_key=${querySecret}`,
+    endpoint: `https://example.test/path?access_token=${querySecret}`,
+  }];
+  report.executiveSummary = {
+    ...report.executiveSummary,
+    headline: `Review https://example.test/path?session=${querySecret}`,
+    businessRisk: `Cookie: ${cookieName}=${cookieSecret}; Secure`,
+    immediateActions: [`Authorization: Bearer ${querySecret}`],
+  };
+
+  let savedReport: ScanResult | undefined;
+  const handler = captureScanPostHandler({
+    runScan: async () => report,
+    saveScanResult: (result) => {
+      savedReport = result;
+    },
+  });
+  const response = new MockResponse();
+
+  await handler(
+    new MockRequest(requestBody()) as unknown as Request,
+    response as unknown as Response,
+  );
+
+  const apiPayload = JSON.stringify(response.body);
+  const historyPayload = JSON.stringify(savedReport);
+  for (const payload of [apiPayload, historyPayload]) {
+    assert.equal(payload.includes(cookieSecret), false);
+    assert.equal(payload.includes(querySecret), false);
+    assert.match(payload, new RegExp(cookieName));
+    assert.match(payload, /Secure=present/);
+    assert.match(payload, /HttpOnly=missing/);
+    assert.match(payload, /SameSite=None/);
+    assert.match(payload, /page=2/);
+  }
+  assert.equal(response.statusCode, 201);
 });
 
 test("background scan is not coupled to the initiating client connection", async () => {

@@ -2,6 +2,7 @@ import { safeFetchText } from "../security/egressPolicy.js";
 import { isResourceLimitError } from "../security/resourceLimits.js";
 import { abortError, throwIfAborted, withTimeoutSignal } from "./abort.js";
 import { BROWSER_HEADERS } from "./httpHeaders.js";
+import { logRedactedError } from "./safeLogging.js";
 
 const ROBOTS_FETCH_TIMEOUT_MS = 5_000;
 
@@ -47,7 +48,7 @@ export async function fetchRobotsPaths(
   } catch (err: unknown) {
     if (options.signal?.aborted) throw abortError(options.signal);
     if (isResourceLimitError(err)) throw err;
-    console.error("[security-scanner] robots.txt fetch failed:", err);
+    logRedactedError("[security-scanner] robots.txt fetch failed:", err);
     return [];
   }
 }

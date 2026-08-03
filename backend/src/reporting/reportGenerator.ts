@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { deduplicateFindings } from "../utils/fingerprintDedup.js";
 import { filterFalsePositives } from "../utils/falsePositiveFilter.js";
 import { maskSecrets } from "../utils/secretMasker.js";
+import { redactScanResult, redactScannerFinding } from "../utils/reportRedaction.js";
 import { applyOverrides } from "../utils/severityOverride.js";
 import { buildExecutiveSummary, calculateRiskSummary } from "./riskEngine.js";
 import type { ScanMode, ScanResult, ScannerFinding, Severity } from "../types.js";
@@ -20,17 +21,15 @@ export function createScanReport(input: {
   const afterOverrides = applyOverrides(input.findings, input.severityOverrides);
   const afterFpFilter = filterFalsePositives(afterOverrides, input.responseBody ?? "");
   const afterDedup = deduplicateFindings(afterFpFilter);
-  const afterMasking = afterDedup.map((finding) => ({
-    ...finding,
-    evidence: maskSecrets(finding.evidence),
-  }));
+  const afterMasking = afterDedup.map(redactScannerFinding);
+  const targetUrl = maskSecrets(input.targetUrl);
 
   const { score } = calculateRiskSummary(afterMasking);
-  const executiveSummary = buildExecutiveSummary(input.targetUrl, afterMasking);
+  const executiveSummary = buildExecutiveSummary(targetUrl, afterMasking);
 
-  return {
+  return redactScanResult({
     scanId: input.scanId ?? randomUUID(),
-    targetUrl: input.targetUrl,
+    targetUrl,
     mode: input.mode,
     isActiveAllowed: input.isActiveAllowed,
     score,
@@ -38,5 +37,5 @@ export function createScanReport(input: {
     executiveSummary,
     startedAt: input.startedAt,
     completedAt: new Date().toISOString(),
-  };
+  });
 }

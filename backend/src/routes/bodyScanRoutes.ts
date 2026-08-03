@@ -8,6 +8,7 @@ import {
 } from "../security/resourceLimits.js";
 import { saveScanResult } from "../storage/database.js";
 import { isAbortError, throwIfAborted } from "../utils/abort.js";
+import { redactScanResult } from "../utils/reportRedaction.js";
 import { createClientDisconnectScope } from "./clientDisconnect.js";
 import { sendResourceLimitResponse } from "./resourceLimitResponse.js";
 import { severityEnum } from "./schemas.js";
@@ -43,9 +44,10 @@ export function registerBodyScanRoutes(
         disconnectScope.signal,
       );
       throwIfAborted(disconnectScope.signal);
-      saveResult(report);
+      const redactedReport = redactScanResult(report);
+      saveResult(redactedReport);
       disconnectScope.complete();
-      response.status(201).json(report);
+      response.status(201).json(redactedReport);
     } catch (error) {
       if (isAbortError(error, disconnectScope.signal)) return;
       if (error instanceof z.ZodError) {

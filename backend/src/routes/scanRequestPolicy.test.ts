@@ -31,3 +31,17 @@ test("allowlist dışı aktif tarama ağ çağrısından önce 403 kararı alır
     { allowed: true },
   );
 });
+
+test("URL userinfo şema seviyesinde secret'ı hata metnine taşımadan reddedilir", () => {
+  const userInfoSecret = "synthetic-schema-userinfo-value-136";
+  const result = scanRequestSchema.safeParse({
+    targetUrl: `https://synthetic-user:${userInfoSecret}@example.test/path`,
+    mode: "passive",
+  });
+
+  assert.equal(result.success, false);
+  if (result.success) return;
+  const issues = JSON.stringify(result.error.issues);
+  assert.match(issues, /URL userinfo is not allowed/);
+  assert.equal(issues.includes(userInfoSecret), false);
+});
