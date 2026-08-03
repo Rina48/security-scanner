@@ -1,4 +1,8 @@
 import { isIP } from "node:net";
+import {
+  loadResourceLimitConfig,
+  type ResourceLimitConfig,
+} from "./resourceLimits.js";
 
 export type Environment = Record<string, string | undefined>;
 
@@ -8,6 +12,7 @@ export interface ServerConfig {
   port: number;
   allowedOrigins: ReadonlySet<string>;
   probeEnabled: boolean;
+  resourceLimits: ResourceLimitConfig;
 }
 
 const DEFAULT_BIND_HOST = "127.0.0.1";
@@ -127,5 +132,6 @@ export function loadServerConfig(env: Environment = process.env): ServerConfig {
     port: parsePort(env.PORT),
     allowedOrigins: parseAllowedOrigins(env.SECURITY_SCANNER_ALLOWED_ORIGINS),
     probeEnabled: env.SECURITY_SCANNER_PROBE_ENABLED === "true",
+    resourceLimits: loadResourceLimitConfig(env),
   };
 }

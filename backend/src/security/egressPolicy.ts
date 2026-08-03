@@ -3,6 +3,12 @@ import type { LookupOptions } from "node:dns";
 import { isIP, type LookupFunction } from "node:net";
 import { Agent, fetch as undiciFetch, Headers } from "undici";
 import {
+  consumeOutboundRequest,
+  getResponseBodyByteLimit,
+  recordExecutionLimitFailure,
+  ResourceLimitError,
+} from "./resourceLimits.js";
+import {
   getActiveHostAllowlist,
   getActivePrivateHostAllowlist,
   getPassivePrivateHostAllowlist,
@@ -54,7 +60,7 @@ export interface SafeFetchInit {
 interface ResponseLike {
   status: number;
   headers: Headers;
-  text(): Promise<string>;
+  text(maxBytes?: number): Promise<string>;
 }
 
 export type EgressResolver = (hostname: string) => Promise<ResolvedAddress[]>;
@@ -69,6 +75,7 @@ export interface SafeFetchOptions {
   maxRedirects?: number;
   resolver?: EgressResolver;
   request?: ValidatedRequest;
+  maxResponseBodyBytes?: number;
 }
 
 const DEFAULT_MAX_REDIRECTS = 5;
@@ -292,31 +299,126 @@ export function createPinnedTransportOptions(
   };
 }
 
+function responseBodyLimitError(maxBytes: number): ResourceLimitError {
+  const error = new ResourceLimitError(
+    "response-body-limit",
+    503,
+    `Uzak yanıt gövdesi ${maxBytes} byte sınırını aştı.`,
+  );
+  recordExecutionLimitFailure(error);
+  return error;
+}
+
+interface ResponseBodyStream {
+  cancel(reason?: unknown): Promise<void>;
+  getReader(): {
+    cancel(reason?: unknown): Promise<void>;
+    read(): Promise<{ done: boolean; value?: Uint8Array }>;
+    releaseLock(): void;
+  };
+}
+
+async function readResponseTextWithLimit(
+  body: ResponseBodyStream | null,
+  headers: Headers,
+  maxBytes: number,
+): Promise<string> {
+  const contentLength = headers.get("content-length");
+  if (contentLength && /^\d+$/.test(contentLength)) {
+    const declaredBytes = Number(contentLength);
+    if (Number.isSafeInteger(declaredBytes) && declaredBytes > maxBytes) {
+      const error = responseBodyLimitError(maxBytes);
+      await body?.cancel(error).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  if (!body) return "";
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let receivedBytes = 0;
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      receivedBytes += value.byteLength;
+      if (receivedBytes > maxBytes) {
+        const error = responseBodyLimitError(maxBytes);
+        await reader.cancel(error).catch(() => undefined);
+        throw error;
+      }
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    return chunks.join("");
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export const defaultValidatedRequest: ValidatedRequest = async (target, init) => {
   const transport = createPinnedTransportOptions(target);
   const dispatcher = new Agent({ connect: transport.connect });
+  const requestController = new AbortController();
+  let disposed = false;
+  const onAbort = (): void => {
+    requestController.abort(init.signal?.reason);
+  };
+  init.signal?.addEventListener("abort", onAbort, { once: true });
+  if (init.signal?.aborted) onAbort();
+
+  const dispose = async (error?: Error): Promise<void> => {
+    if (disposed) return;
+    disposed = true;
+    init.signal?.removeEventListener("abort", onAbort);
+    if (error) {
+      requestController.abort(error);
+      await dispatcher.destroy(error);
+      return;
+    }
+    await dispatcher.close();
+  };
+
   try {
     const response = await undiciFetch(transport.url, {
       method: init.method,
       headers: init.headers,
       body: init.body,
-      signal: init.signal,
+      signal: requestController.signal,
       redirect: "manual",
       dispatcher,
     });
     return {
       status: response.status,
       headers: response.headers,
-      async text() {
+      async text(maxBytes = getResponseBodyByteLimit()) {
         try {
-          return await response.text();
+          return await readResponseTextWithLimit(
+            response.body,
+            response.headers,
+            maxBytes,
+          );
+        } catch (error) {
+          await dispose(error instanceof Error ? error : new Error("Response read failed."));
+          throw error;
         } finally {
-          await dispatcher.close();
+          const abortReason = requestController.signal.reason;
+          await dispose(
+            requestController.signal.aborted
+              ? (abortReason instanceof Error
+                  ? abortReason
+                  : new DOMException("The operation was aborted", "AbortError"))
+              : undefined,
+          );
         }
       },
     };
   } catch (error) {
-    await dispatcher.close();
+    await dispose(error instanceof Error ? error : new Error("Request failed."));
     throw error;
   }
 };
@@ -344,17 +446,20 @@ export async function safeFetchText(
   const resolver = options.resolver ?? defaultResolver;
   const request = options.request ?? defaultValidatedRequest;
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
+  const maxResponseBodyBytes = options.maxResponseBodyBytes
+    ?? getResponseBodyByteLimit();
   const redirectMode = init.redirect ?? "follow";
 
   let currentUrl = rawUrl;
   let currentInit = init;
   for (let redirectCount = 0; ; redirectCount += 1) {
     const target = await resolveEgressTarget(currentUrl, policy, resolver);
+    consumeOutboundRequest();
     const response = await request(target, currentInit);
     const isRedirect = REDIRECT_STATUSES.has(response.status);
 
     if (!isRedirect || redirectMode === "manual") {
-      const body = await response.text();
+      const body = await response.text(maxResponseBodyBytes);
       return {
         status: response.status,
         headers: response.headers,
@@ -363,7 +468,7 @@ export async function safeFetchText(
       };
     }
 
-    await response.text();
+    await response.text(maxResponseBodyBytes);
     if (redirectMode === "error") {
       throw new EgressPolicyError("Redirect yanıtına izin verilmedi.");
     }

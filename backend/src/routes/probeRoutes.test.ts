@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { NextFunction } from "express";
+import { Headers } from "undici";
+import {
+  createScanResourceManager,
+  DEFAULT_RESOURCE_LIMITS,
+} from "../security/resourceLimits.js";
 import { createProbeHandler } from "./probeRoutes.js";
 import { createMockRequest, createMockResponse } from "../testing/expressMocks.js";
 
@@ -24,4 +29,34 @@ test("sahte X-Forwarded-For loopback olmayan probe istemcisine erişim sağlamaz
 
   assert.equal(recorder.statusCode, 403);
   assert.equal(fetchCalls, 0);
+});
+
+test("probe rotası ortak tarama rate limit'ini aşınca 429 döndürür", async () => {
+  const resources = createScanResourceManager({
+    ...DEFAULT_RESOURCE_LIMITS,
+    scanRateLimitMax: 1,
+  });
+  const handler = createProbeHandler(async () => ({
+    status: 200,
+    headers: new Headers(),
+    body: "ok",
+    url: "http://127.0.0.1",
+  }), resources);
+  const next = (() => undefined) as NextFunction;
+  const request = createMockRequest({
+    remoteAddress: "127.0.0.1",
+    body: { targetUrl: "http://fixture.test" },
+  });
+
+  const accepted = createMockResponse();
+  await handler(request, accepted.response, next);
+  assert.equal(accepted.recorder.statusCode, 200);
+
+  const limited = createMockResponse();
+  await handler(request, limited.response, next);
+  assert.equal(limited.recorder.statusCode, 429);
+  assert.deepEqual(limited.recorder.body, {
+    code: "scan-rate-limit",
+    message: "Çok fazla tarama isteği gönderildi. Daha sonra tekrar deneyin.",
+  });
 });

@@ -4,6 +4,10 @@ import test from "node:test";
 import type { Express, Request, Response } from "express";
 import type { ScanResult } from "../types.js";
 import {
+  createScanResourceManager,
+  DEFAULT_RESOURCE_LIMITS,
+} from "../security/resourceLimits.js";
+import {
   registerScanRoutes,
   type ScanRouteDependencies,
 } from "./scanRoutes.js";
@@ -23,12 +27,18 @@ class MockRequest extends EventEmitter {
 class MockResponse extends EventEmitter {
   body: unknown;
   destroyed = false;
+  headers = new Map<string, string>();
   headersSent = false;
   statusCode = 200;
   writableEnded = false;
 
   status(code: number): this {
     this.statusCode = code;
+    return this;
+  }
+
+  setHeader(name: string, value: string | number | readonly string[]): this {
+    this.headers.set(name.toLowerCase(), String(value));
     return this;
   }
 
@@ -218,4 +228,87 @@ test("background scan is not coupled to the initiating client connection", async
   assert.equal(response.statusCode, 202);
   assert.equal(request.listenerCount("aborted"), 0);
   assert.equal(response.listenerCount("close"), 0);
+});
+
+test("eşzamanlı tarama kapasitesi doluyken yeni tarama 503 ile reddedilir", async () => {
+  const resources = createScanResourceManager({
+    ...DEFAULT_RESOURCE_LIMITS,
+    maxConcurrentScans: 1,
+    maxQueuedScans: 0,
+    scanRateLimitMax: 10,
+  });
+  let releaseFirst!: () => void;
+  let firstStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    firstStarted = resolve;
+  });
+  const firstGate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let scanStarts = 0;
+  const handler = captureScanPostHandler({
+    resources,
+    runScan: async () => {
+      scanStarts += 1;
+      firstStarted();
+      await firstGate;
+      return completedReport();
+    },
+    saveScanResult: () => undefined,
+  });
+
+  const firstResponse = new MockResponse();
+  const first = handler(
+    new MockRequest(requestBody()) as unknown as Request,
+    firstResponse as unknown as Response,
+  );
+  await started;
+
+  const rejectedResponse = new MockResponse();
+  await handler(
+    new MockRequest(requestBody()) as unknown as Request,
+    rejectedResponse as unknown as Response,
+  );
+  assert.equal(rejectedResponse.statusCode, 503);
+  assert.deepEqual(rejectedResponse.body, {
+    code: "scan-capacity",
+    message: "Tarama kapasitesi dolu. Daha sonra tekrar deneyin.",
+  });
+  assert.equal(scanStarts, 1);
+
+  releaseFirst();
+  await first;
+  assert.equal(firstResponse.statusCode, 201);
+});
+
+test("tarama başlangıç rate limit'i rota seviyesinde 429 döndürür", async () => {
+  const resources = createScanResourceManager({
+    ...DEFAULT_RESOURCE_LIMITS,
+    scanRateLimitMax: 1,
+    scanRateLimitWindowMs: 60_000,
+  });
+  const handler = captureScanPostHandler({
+    resources,
+    runScan: async () => completedReport(),
+    saveScanResult: () => undefined,
+  });
+
+  const acceptedResponse = new MockResponse();
+  await handler(
+    new MockRequest(requestBody()) as unknown as Request,
+    acceptedResponse as unknown as Response,
+  );
+  assert.equal(acceptedResponse.statusCode, 201);
+
+  const limitedResponse = new MockResponse();
+  await handler(
+    new MockRequest(requestBody()) as unknown as Request,
+    limitedResponse as unknown as Response,
+  );
+  assert.equal(limitedResponse.statusCode, 429);
+  assert.equal(limitedResponse.headers.get("retry-after"), "60");
+  assert.deepEqual(limitedResponse.body, {
+    code: "scan-rate-limit",
+    message: "Çok fazla tarama isteği gönderildi. Daha sonra tekrar deneyin.",
+  });
 });

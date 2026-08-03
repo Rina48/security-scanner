@@ -2,6 +2,11 @@ import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import { runScan } from "../scanners/runScan.js";
 import { EgressPolicyError } from "../security/egressPolicy.js";
+import {
+  createScanResourceManager,
+  isResourceLimitError,
+  type ScanResourceManager,
+} from "../security/resourceLimits.js";
 import { isAbortError, throwIfAborted } from "../utils/abort.js";
 import {
   clearAllScanResults,
@@ -9,7 +14,12 @@ import {
   listRecentScanResults,
   saveScanResult,
 } from "../storage/database.js";
-import { getPendingScan, startBackgroundScan } from "./asyncScanTracker.js";
+import {
+  createAsyncScanTracker,
+  type AsyncScanTracker,
+} from "./asyncScanTracker.js";
+import { createClientDisconnectScope } from "./clientDisconnect.js";
+import { sendResourceLimitResponse } from "./resourceLimitResponse.js";
 import { authorizeScanRequest, scanRequestSchema } from "./scanRequestPolicy.js";
 
 const DEFAULT_SCAN_HISTORY_LIMIT = 30;
@@ -17,34 +27,9 @@ const DEFAULT_SCAN_HISTORY_LIMIT = 30;
 export interface ScanRouteDependencies {
   runScan?: typeof runScan;
   saveScanResult?: typeof saveScanResult;
-  startBackgroundScan?: typeof startBackgroundScan;
-}
-
-function createClientDisconnectScope(request: Request, response: Response): {
-  complete(): void;
-  dispose(): void;
-  signal: AbortSignal;
-} {
-  const controller = new AbortController();
-  let completed = false;
-
-  const abort = (): void => {
-    if (completed || controller.signal.aborted) return;
-    controller.abort(new DOMException("Client disconnected", "AbortError"));
-  };
-  const complete = (): void => {
-    completed = true;
-  };
-  const dispose = (): void => {
-    request.removeListener("aborted", abort);
-    response.removeListener("close", abort);
-  };
-
-  request.once("aborted", abort);
-  response.once("close", abort);
-  if (request.aborted || response.destroyed) abort();
-
-  return { complete, dispose, signal: controller.signal };
+  startBackgroundScan?: AsyncScanTracker["start"];
+  asyncTracker?: AsyncScanTracker;
+  resources?: ScanResourceManager;
 }
 
 async function runSynchronousScan(
@@ -53,13 +38,15 @@ async function runSynchronousScan(
   scanRequest: Parameters<typeof runScan>[0],
   scanRunner: typeof runScan,
   saveResult: typeof saveScanResult,
+  resources: ScanResourceManager,
 ): Promise<void> {
   const disconnectScope = createClientDisconnectScope(request, response);
   try {
     throwIfAborted(disconnectScope.signal);
-    const report = await scanRunner(scanRequest, {
-      signal: disconnectScope.signal,
-    });
+    const report = await resources.runScan(
+      () => scanRunner(scanRequest, { signal: disconnectScope.signal }),
+      disconnectScope.signal,
+    );
     throwIfAborted(disconnectScope.signal);
     saveResult(report);
     disconnectScope.complete();
@@ -78,7 +65,14 @@ export function registerScanRoutes(
 ): void {
   const scanRunner = dependencies.runScan ?? runScan;
   const saveResult = dependencies.saveScanResult ?? saveScanResult;
-  const startAsyncScan = dependencies.startBackgroundScan ?? startBackgroundScan;
+  const resources = dependencies.resources ?? createScanResourceManager();
+  const tracker = dependencies.asyncTracker ?? createAsyncScanTracker(resources, {
+    runScan: scanRunner,
+    saveScanResult: saveResult,
+  });
+  const startAsyncScan = dependencies.startBackgroundScan
+    ?? tracker.start;
+  const findPendingScan = tracker.get;
 
   app.get("/api/scans", (_request, response) => {
     response.json({ scans: listRecentScanResults(DEFAULT_SCAN_HISTORY_LIMIT) });
@@ -86,15 +80,17 @@ export function registerScanRoutes(
 
   app.get("/api/scans/:id", (request, response) => {
     const { id } = request.params;
-    const pending = getPendingScan(id);
+    const pending = findPendingScan(id);
     if (pending) {
       response.status(202).json({
         scanId: id,
-        status: "running",
+        status: pending.status,
         targetUrl: pending.targetUrl,
         mode: pending.mode,
         startedAt: pending.startedAt,
-        message: "Tarama devam ediyor. Tekrar isteyin.",
+        message: pending.status === "queued"
+          ? "Tarama kapasite bekleme sırasında. Tekrar isteyin."
+          : "Tarama devam ediyor. Tekrar isteyin.",
       });
       return;
     }
@@ -114,6 +110,7 @@ export function registerScanRoutes(
 
   app.post("/api/scans", async (request, response) => {
     try {
+      resources.assertScanStartAllowed();
       const parsed = scanRequestSchema.parse(request.body);
       const { async: useAsync, ...scanRequest } = parsed;
 
@@ -143,6 +140,7 @@ export function registerScanRoutes(
         scanRequest,
         scanRunner,
         saveResult,
+        resources,
       );
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -155,6 +153,11 @@ export function registerScanRoutes(
 
       if (error instanceof EgressPolicyError) {
         response.status(403).json({ message: "Target is not allowed by egress policy." });
+        return;
+      }
+
+      if (isResourceLimitError(error)) {
+        sendResourceLimitResponse(response, error);
         return;
       }
 

@@ -1,4 +1,5 @@
 import type { ScannerFinding } from "../../types.js";
+import { isResourceLimitError } from "../../security/resourceLimits.js";
 import { abortError, throwIfAborted } from "../../utils/abort.js";
 import { fetchPathWithBypass } from "../../utils/wafBypass.js";
 import { PATH_DISCOVERY_CONCURRENCY } from "../constants.js";
@@ -27,6 +28,7 @@ async function checkPath(
     };
   } catch (err: unknown) {
     if (signal?.aborted) throw abortError(signal);
+    if (isResourceLimitError(err)) throw err;
     console.error("[pathDiscoveryScanner] Path probe failed:", err);
     return null;
   }

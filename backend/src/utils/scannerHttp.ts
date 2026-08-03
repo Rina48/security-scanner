@@ -9,6 +9,7 @@
 
 import { Headers } from "undici";
 import { safeFetchText } from "../security/egressPolicy.js";
+import { isResourceLimitError } from "../security/resourceLimits.js";
 import { SHORT_PROBE_TIMEOUT_MS } from "../scanners/constants.js";
 import { abortError, throwIfAborted, withTimeoutSignal } from "./abort.js";
 import { BROWSER_HEADERS } from "./httpHeaders.js";
@@ -86,6 +87,7 @@ export async function scannerFetch(
     };
   } catch (err: unknown) {
     if (signal?.aborted) throw abortError(signal);
+    if (isResourceLimitError(err)) throw err;
     console.error(`[${scope}] HTTP probe failed:`, err instanceof Error ? err.message : err);
     return {
       body: "",

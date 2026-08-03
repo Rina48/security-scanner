@@ -3,6 +3,7 @@
  * Sızma testi amacı: WAF imzalarını aşarak uygulamaya ulaşmak.
  */
 import { safeFetchText } from "../security/egressPolicy.js";
+import { isResourceLimitError } from "../security/resourceLimits.js";
 import { abortError, throwIfAborted, withTimeoutSignal } from "./abort.js";
 import { BROWSER_HEADERS } from "./httpHeaders.js";
 
@@ -124,6 +125,7 @@ export async function fetchWithBypass(
       }
     } catch (error) {
       if (signal?.aborted) throw abortError(signal);
+      if (isResourceLimitError(error)) throw error;
       // Bir varyant hata verirse sonrakine geç
     }
   }
@@ -170,6 +172,7 @@ export async function fetchPathWithBypass(
           }
         } catch (error) {
           if (options.signal?.aborted) throw abortError(options.signal);
+          if (isResourceLimitError(error)) throw error;
           // Devam et
         }
       }

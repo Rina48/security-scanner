@@ -19,8 +19,26 @@ Security Scanner, HTTP(S) hedeflerinde pasif yanıt analizi ve açıkça yetkile
 - Tarayıcı erişimi için izin verilen origin'ler `SECURITY_SCANNER_ALLOWED_ORIGINS` ile açıkça tanımlanır.
 - Pasif istekler HTTP(S), DNS, yönlendirme ve ağ adresi politikalarından geçer; metadata ve riskli yerel ağ adresleri varsayılan olarak reddedilir.
 - Aktif tarama, hedef hostname'i `ALLOWED_ACTIVE_HOSTS` exact-host allowlist'inde yoksa reddedilir. Private hedefler ayrıca `ALLOWED_ACTIVE_PRIVATE_HOSTS` içinde olmalıdır.
+- Tarama başlangıçları global eşzamanlılık, kuyruk, asenkron iş, hız, hedef istek ve uzak yanıt boyutu limitlerinden geçer. Kapasite kontrolleri backend'de uygulanır.
 - Gerçek hedefleri yalnız açık ve güncel yetkiniz varsa tarayın. Üçüncü taraf sistemlerde izinsiz kullanım yapmayın.
 - Python agent isteğe bağlıdır ve kullanıldığında Anthropic API ile iletişim kurar; backend, frontend ve MCP yerel servisler olarak çalışabilir.
+
+### Kaynak limitleri
+
+Limitler environment değişkenleriyle değiştirilebilir. Geçersiz değerler sunucu başlangıcını fail-closed durdurur.
+
+| Environment değişkeni | Varsayılan | Açıklama |
+| --- | ---: | --- |
+| `SECURITY_SCANNER_MAX_CONCURRENT_SCANS` | `2` | Aynı anda çalışan global tarama sayısı |
+| `SECURITY_SCANNER_MAX_QUEUED_SCANS` | `8` | Scheduler'da bekleyebilen tarama sayısı |
+| `SECURITY_SCANNER_MAX_ASYNC_JOBS` | `8` | Bellekte izlenen asenkron iş sayısı |
+| `SECURITY_SCANNER_RATE_LIMIT_MAX` | `20` | Hız penceresinde kabul edilen tarama başlangıcı |
+| `SECURITY_SCANNER_RATE_LIMIT_WINDOW_MS` | `60000` | Tarama başlangıç hız penceresi (ms) |
+| `SECURITY_SCANNER_MAX_RESPONSE_BODY_BYTES` | `1048576` | Tek uzak HTTP yanıtında okunan en fazla byte |
+| `SECURITY_SCANNER_MAX_REQUESTS_PER_SCAN` | `128` | Tek taramada hedefe gönderilebilen HTTP/TLS ağ isteği |
+| `SECURITY_SCANNER_ASYNC_JOB_TTL_MS` | `600000` | Asenkron iş kaydı ve çalışma süresi üst sınırı (ms) |
+
+Kapasite dolduğunda API `503`, hız sınırı aşıldığında `429` ve `Retry-After` döndürür. Uzak yanıt veya hedef istek bütçesi aşıldığında ilgili okuma/tarama durdurulur.
 
 ## Mimari
 

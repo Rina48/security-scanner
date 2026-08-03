@@ -1,5 +1,6 @@
 import { isActiveScanAllowed } from "../policy/targetPolicyGuard.js";
 import { safeFetchText } from "../security/egressPolicy.js";
+import { isResourceLimitError } from "../security/resourceLimits.js";
 import { BROWSER_HEADERS } from "../utils/httpHeaders.js";
 import { throwIfAborted, withTimeoutSignal } from "../utils/abort.js";
 import { createScanReport } from "../reporting/reportGenerator.js";
@@ -159,7 +160,12 @@ export async function runScan(
 
   const tlsFindings = tlsResult.status === "fulfilled" ? tlsResult.value : [];
 
+  if (tlsResult.status === "rejected" && isResourceLimitError(tlsResult.reason)) {
+    throw tlsResult.reason;
+  }
+
   if (fetchResult.status === "rejected") {
+    if (isResourceLimitError(fetchResult.reason)) throw fetchResult.reason;
     if (!hasTlsDiagnostic(tlsFindings)) throw fetchResult.reason;
 
     return (dependencies.createReport ?? createScanReport)({

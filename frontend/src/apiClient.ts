@@ -7,6 +7,7 @@ export type ApiErrorCode =
   | "api-unreachable"
   | "target-not-authorized"
   | "invalid-request"
+  | "resource-limited"
   | "request-failed"
   | "unexpected";
 
@@ -47,6 +48,13 @@ function errorForStatus(status: number): ApiClientError {
   }
   if (status === 400) {
     return new ApiClientError("invalid-request", "İstek bilgileri geçerli değil.", status);
+  }
+  if (status === 429 || status === 503) {
+    return new ApiClientError(
+      "resource-limited",
+      "Tarama kapasitesi şu anda dolu.",
+      status,
+    );
   }
   if (status >= 500) {
     return new ApiClientError("request-failed", "API isteği tamamlayamadı.", status);

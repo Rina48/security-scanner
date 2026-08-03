@@ -8,6 +8,10 @@ import {
   type EgressPolicy,
   type ValidatedTarget,
 } from "../../security/egressPolicy.js";
+import {
+  consumeOutboundRequest,
+  isResourceLimitError,
+} from "../../security/resourceLimits.js";
 import type { ScannerFinding } from "../../types.js";
 import { abortError, isAbortError } from "../../utils/abort.js";
 
@@ -325,6 +329,7 @@ export function connectDiagnosticTls(
     };
 
     try {
+      consumeOutboundRequest();
       socket = connector(connectionOptions);
     } catch (error) {
       reject(errorFromUnknown(error, "TLS connector failed"));
@@ -374,6 +379,7 @@ async function probeLegacyVersion(
     return { status: "supported", version, code: "HANDSHAKE_SUCCEEDED" };
   } catch (error) {
     if (isAbortError(error, dependencies.signal)) throw error;
+    if (isResourceLimitError(error)) throw error;
     return { ...classifyLegacyProbeError(error), version };
   }
 }
@@ -617,6 +623,7 @@ export async function runTlsScanner(
     );
   } else if (modernResult) {
     if (isAbortError(modernResult.reason, dependencies.signal)) throw modernResult.reason;
+    if (isResourceLimitError(modernResult.reason)) throw modernResult.reason;
     addTlsScanFailure(findings, targetUrl, modernResult.reason);
   }
 
@@ -626,6 +633,7 @@ export async function runTlsScanner(
     if (!version || !result) continue;
     if (result.status === "rejected") {
       if (isAbortError(result.reason, dependencies.signal)) throw result.reason;
+      if (isResourceLimitError(result.reason)) throw result.reason;
       probeResults.push({ ...classifyLegacyProbeError(result.reason), version });
     } else {
       probeResults.push(result.value);

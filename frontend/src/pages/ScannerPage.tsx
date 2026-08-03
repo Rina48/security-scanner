@@ -92,6 +92,13 @@ function feedbackForError(error: unknown): ScanFeedback {
           description: "İstek API tarafından kabul edilmedi.",
           nextAction: "Hedef ve tarama seçeneklerini kontrol edip yeniden deneyin.",
         };
+      case "resource-limited":
+        return {
+          status: "error",
+          title: "Tarama kapasitesi dolu",
+          description: "Sunucu yeni bir taramayı şu anda kabul edemiyor.",
+          nextAction: "Kısa bir süre bekleyip yeniden deneyin.",
+        };
       case "request-failed":
         return {
           status: "error",

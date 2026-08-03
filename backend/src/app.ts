@@ -2,14 +2,18 @@ import cors from "cors";
 import express, { type Express } from "express";
 import helmet from "helmet";
 import { registerBodyScanRoutes } from "./routes/bodyScanRoutes.js";
+import { createAsyncScanTracker } from "./routes/asyncScanTracker.js";
 import { registerProbeRoutes } from "./routes/probeRoutes.js";
 import { registerScanRoutes } from "./routes/scanRoutes.js";
 import { createApiAuthMiddleware } from "./security/auth.js";
 import { createCorsOptions, createOriginGuard } from "./security/corsPolicy.js";
+import { createScanResourceManager } from "./security/resourceLimits.js";
 import type { ServerConfig } from "./security/serverConfig.js";
 
 export function createApp(config: ServerConfig): Express {
   const app = express();
+  const resources = createScanResourceManager(config.resourceLimits);
+  const asyncTracker = createAsyncScanTracker(resources);
 
   app.use(helmet());
   app.use(createOriginGuard(config.allowedOrigins));
@@ -22,10 +26,10 @@ export function createApp(config: ServerConfig): Express {
   app.use("/api", createApiAuthMiddleware(config.apiToken));
   app.use(express.json({ limit: "2mb" }));
 
-  registerScanRoutes(app);
-  registerBodyScanRoutes(app);
+  registerScanRoutes(app, { asyncTracker, resources });
+  registerBodyScanRoutes(app, { resources });
   if (config.probeEnabled) {
-    registerProbeRoutes(app);
+    registerProbeRoutes(app, resources);
   }
 
   return app;

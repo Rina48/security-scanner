@@ -5,6 +5,7 @@
  */
 
 import type { ScannerFinding } from "../../types.js";
+import { isResourceLimitError } from "../../security/resourceLimits.js";
 import { abortError, throwIfAborted, withTimeoutSignal } from "../../utils/abort.js";
 import { BROWSER_HEADERS } from "../../utils/httpHeaders.js";
 import { credentialRandomDelay, fetchWithProxy, isProxyConfigured } from "../../utils/httpClient.js";
@@ -220,6 +221,7 @@ export async function runDefaultCredentialScanner(
             }
           } catch (err) {
             if (signal?.aborted) throw abortError(signal);
+            if (isResourceLimitError(err)) throw err;
             console.error(
               "[defaultCredentialScanner] Probe failed:",
               err instanceof Error ? err.message : String(err)
@@ -229,6 +231,7 @@ export async function runDefaultCredentialScanner(
       }
     } catch (err) {
       if (signal?.aborted) throw abortError(signal);
+      if (isResourceLimitError(err)) throw err;
       console.error(
         "[defaultCredentialScanner] Fetch failed:",
         err instanceof Error ? err.message : String(err)

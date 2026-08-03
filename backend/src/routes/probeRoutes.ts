@@ -7,7 +7,14 @@ import {
   type SafeFetchResult,
 } from "../security/egressPolicy.js";
 import { isLoopbackAddress } from "../security/networkAddress.js";
+import {
+  createScanResourceManager,
+  isResourceLimitError,
+  type ScanResourceManager,
+} from "../security/resourceLimits.js";
+import { withTimeoutSignal } from "../utils/abort.js";
 import { BROWSER_HEADERS } from "../utils/httpHeaders.js";
+import { sendResourceLimitResponse } from "./resourceLimitResponse.js";
 
 /**
  * Pentest yardımcı endpoint. Varsayılan olarak kayıt edilmez; etkin olduğunda
@@ -32,6 +39,7 @@ type ProbeFetch = (
 
 export function createProbeHandler(
   fetchTarget: ProbeFetch = safeFetchText,
+  resources: ScanResourceManager = createScanResourceManager(),
 ): RequestHandler {
   return async (request, response) => {
     if (!isLoopbackAddress(request.socket.remoteAddress)) {
@@ -40,6 +48,7 @@ export function createProbeHandler(
     }
 
     try {
+      resources.assertScanStartAllowed();
       const parsed = probeSchema.parse(request.body);
 
       const fetchHeaders: Record<string, string> = { ...BROWSER_HEADERS };
@@ -47,15 +56,22 @@ export function createProbeHandler(
         fetchHeaders["content-type"] = parsed.contentType;
       }
 
-      const fetchResp = await fetchTarget(parsed.targetUrl, {
-        method: parsed.method,
-        redirect: "follow",
-        headers: fetchHeaders,
-        body: parsed.method === "POST" && parsed.body ? parsed.body : undefined,
-        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-      }, {
-        access: "probe",
-      });
+      const fetchResp = await withTimeoutSignal(
+        undefined,
+        PROBE_TIMEOUT_MS,
+        (requestSignal) => resources.runScan(
+          () => fetchTarget(parsed.targetUrl, {
+            method: parsed.method,
+            redirect: "follow",
+            headers: fetchHeaders,
+            body: parsed.method === "POST" && parsed.body ? parsed.body : undefined,
+            signal: requestSignal,
+          }, {
+            access: "probe",
+          }),
+          requestSignal,
+        ),
+      );
 
       const respHeaders: Record<string, string> = {};
       for (const headerName of ["content-type", "content-length"]) {
@@ -77,12 +93,19 @@ export function createProbeHandler(
         response.status(403).json({ message: "Hedef izin listesi dışında." });
         return;
       }
+      if (isResourceLimitError(error)) {
+        sendResourceLimitResponse(response, error);
+        return;
+      }
       console.error("[probeRoutes] Probe failed.");
       response.status(500).json({ message: "Probe failed." });
     }
   };
 }
 
-export function registerProbeRoutes(app: Express): void {
-  app.post("/api/probe", createProbeHandler());
+export function registerProbeRoutes(
+  app: Express,
+  resources: ScanResourceManager = createScanResourceManager(),
+): void {
+  app.post("/api/probe", createProbeHandler(safeFetchText, resources));
 }
