@@ -1,0 +1,6 @@
+# Her satıra taranacak bir HTTP(S) hedefi yazın.
+# Bu dosya yalnız güvenli ve sahte örnekler içerir.
+
+https://example.com/
+https://example.org/security-check
+http://localhost:8080/
