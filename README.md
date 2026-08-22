@@ -184,6 +184,16 @@ Source comments and test names are written in Turkish.
 
 ---
 
+## Contributing
+
+Setup instructions, code standards, the checks CI runs, and the security rules that apply to scanner changes are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Reporting a vulnerability
+
+Please do not open a public issue. See [SECURITY.md](SECURITY.md) for the private reporting process and what is in scope.
+
+---
+
 ## License
 
 Released under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See [LICENSE](LICENSE) for details.
