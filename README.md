@@ -6,109 +6,118 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)
 ![MCP Ready](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-8A2BE2.svg)
 
-Security Scanner, HTTP(S) hedeflerinde pasif yanıt analizi ve açıkça yetkilendirilmiş hedeflerde sınırlı aktif kontroller çalıştıran yerel bir güvenlik inceleme aracıdır. **TypeScript backend**, **React web arayüzü**, LLM/IDE entegrasyonu için **Model Context Protocol (MCP) sunucusu** ve otonom raporlama için isteğe bağlı **Python AI agent** bileşenlerinden oluşur.
+A local security review tool that runs passive response analysis against HTTP(S) targets and a limited set of active checks against explicitly authorized ones. It ships as four parts: a **TypeScript backend**, a **React web UI**, a **Model Context Protocol (MCP) server** for LLM and IDE integration, and an optional **Python AI agent** for autonomous reporting.
+
+Türkçe sürüm: [README.tr.md](README.tr.md)
 
 ---
 
 > [!WARNING]
-> **YASAL VE ETİK UYARI (DISCLAIMER)**<br>
-> Bu araç savunma amaçlı güvenlik analizleri, yerel geliştirme denetimleri ve açıkça izin verilmiş hedefler için geliştirilmiştir. Yetkisiz sistemler, LAN cihazları veya üçüncü taraf altyapılar üzerinde izinsiz tarama yapılması yasaktır ve yasal sorumluluk doğurur. Bulgular güvenlik incelemesini destekler; bir sistemin mutlak güvenli olduğunu kanıtlamaz.
+> **Legal and ethical notice**<br>
+> This tool is built for defensive security analysis, local development audits, and targets you are explicitly permitted to test. Scanning systems you do not own or have written authorization for, including LAN devices and third-party infrastructure, is prohibited and may carry legal consequences. Findings support a security review; they do not prove a system is safe.
 
 ---
 
-## Öne Çıkan Özellikler
+## Features
 
-- **Pasif Güvenlik Analizi**: HTTP yanıt başlıkları (HSTS, CSP, X-Frame-Options vb.), cookie güvenlik bayrakları (`HttpOnly`, `Secure`, `SameSite`) ve hassas bilgi sızıntılarını (API anahtarları, JWT, hata izleri) inceler.
-- **TLS ve Sertifika Denetimi**: Sertifika geçerlilik süreleri, hostname eşleşmesi ve güven zincirini doğrular.
-- **Çevrimdışı Gövde (Body) Analizi**: Canlı hedefe istek atmadan, kopyalanan HTTP yanıt metnini veya hata loglarını analiz eder.
-- **Sunucu Tarafı Güvenli Aktif Tarama**: Yalnız backend `ALLOWED_ACTIVE_HOSTS` exact allowlist'inde yer alan hedeflerde sınırlı SQLi/XSS/Traversal kontrolleri yürütür.
-- **Model Context Protocol (MCP) Desteği**: Claude Desktop, Cursor, Claude Code ve diğer AI araçlarıyla doğrudan stdio üzerinden konuşarak yapay zekanın otonom güvenlik denetimleri yapmasını sağlar.
-- **Kaynak ve SSRF Koruması**: Fail-closed mimari, metadata IP koruması, pinned DNS çözümü ve global hız/kaynak limitleri.
+- **Passive analysis.** Inspects HTTP response headers (HSTS, CSP, X-Frame-Options and others), cookie flags (`HttpOnly`, `Secure`, `SameSite`), and leaked secrets in response bodies (API keys, JWTs, stack traces).
+- **TLS and certificate checks.** Validates expiry windows, hostname match, and the trust chain.
+- **Offline body analysis.** Analyzes a pasted HTTP response or error log without sending a single request to a live host.
+- **Server-side gated active scanning.** Runs a limited set of SQLi, XSS, and traversal checks only against hosts listed in the backend's exact `ALLOWED_ACTIVE_HOSTS` allowlist.
+- **Model Context Protocol support.** Talks to Claude Desktop, Cursor, Claude Code and other AI tools over stdio, so an assistant can run security reviews on its own.
+- **SSRF and resource protection.** Fail-closed egress policy, metadata IP blocking, pinned DNS resolution, and global rate and resource caps.
 
 ---
 
-## Güvenlik Modeli
+## Security model
 
-- Backend varsayılan olarak yalnız IPv4 loopback (`127.0.0.1:4310`) üzerinde dinler. Dış ağ arayüzlerine açılmamalıdır.
-- `/api/health` dışındaki tüm rotalar Bearer token doğrulaması ister. `SECURITY_SCANNER_API_TOKEN` en az 32 karakter olmalıdır.
-- Tarayıcı Origin adresleri `SECURITY_SCANNER_ALLOWED_ORIGINS` ile sınırlandırılmıştır.
-- Pasif istekler SSRF, DNS sabitleme, link-local ve metadata IP filtrelerinden geçer.
-- Aktif tarama izni istemci/frontend girdisine göre değil, backend sunucusundaki `ALLOWED_ACTIVE_HOSTS` listesine göre belirlenir.
+- The backend binds to IPv4 loopback only (`127.0.0.1:4310`) by default and is not meant to be exposed on an external interface.
+- Every route except `/api/health` requires Bearer token authentication. `SECURITY_SCANNER_API_TOKEN` must be at least 32 characters.
+- Browser origins are restricted through `SECURITY_SCANNER_ALLOWED_ORIGINS`.
+- Passive requests pass through SSRF, DNS pinning, link-local, and metadata IP filters.
+- Active scanning permission comes from the backend's `ALLOWED_ACTIVE_HOSTS` list, never from client or frontend input.
 
-### Kaynak Limitleri
+### Resource limits
 
-| Ortam Değişkeni | Varsayılan | Açıklama |
+| Environment variable | Default | Description |
 | --- | ---: | --- |
-| `SECURITY_SCANNER_MAX_CONCURRENT_SCANS` | `2` | Aynı anda çalışan global tarama sayısı |
-| `SECURITY_SCANNER_MAX_QUEUED_SCANS` | `8` | Scheduler kuyruk derinliği |
-| `SECURITY_SCANNER_MAX_ASYNC_JOBS` | `8` | Bellekte izlenen asenkron iş sayısı |
-| `SECURITY_SCANNER_RATE_LIMIT_MAX` | `20` | Hız penceresindeki azami tarama başlatma |
-| `SECURITY_SCANNER_RATE_LIMIT_WINDOW_MS` | `60000` | Tarama başlangıç hız penceresi (ms) |
-| `SECURITY_SCANNER_MAX_RESPONSE_BODY_BYTES` | `1048576` | Tek yanıtta okunan azami byte (1 MB) |
-| `SECURITY_SCANNER_MAX_REQUESTS_PER_SCAN` | `128` | Tarama başına hedefe giden azami istek sayısı |
-| `SECURITY_SCANNER_ASYNC_JOB_TTL_MS` | `600000` | Asenkron iş zaman aşımı (ms) |
+| `SECURITY_SCANNER_MAX_CONCURRENT_SCANS` | `2` | Global number of scans running at once |
+| `SECURITY_SCANNER_MAX_QUEUED_SCANS` | `8` | Scheduler queue depth |
+| `SECURITY_SCANNER_MAX_ASYNC_JOBS` | `8` | Async jobs tracked in memory |
+| `SECURITY_SCANNER_RATE_LIMIT_MAX` | `20` | Scan starts allowed per rate window |
+| `SECURITY_SCANNER_RATE_LIMIT_WINDOW_MS` | `60000` | Scan start rate window (ms) |
+| `SECURITY_SCANNER_MAX_RESPONSE_BODY_BYTES` | `1048576` | Max bytes read from a single response (1 MB) |
+| `SECURITY_SCANNER_MAX_REQUESTS_PER_SCAN` | `128` | Max requests sent to a target per scan |
+| `SECURITY_SCANNER_ASYNC_JOB_TTL_MS` | `600000` | Async job timeout (ms) |
 
 ---
 
-## Mimari
+## Architecture
 
-- `backend/`: Express API, tarayıcı modülleri, egress politikaları, raporlama ve SQLite geçmişi.
-- `frontend/`: React 19 ve Vite tabanlı yerel kullanıcı arayüzü; URL/Body analizi, geçmiş ve Markdown/JSON dışa aktarma.
-- `mcp-server/`: Model Context Protocol (MCP) standardında stdio sunucusu (Cursor, Claude Desktop, Claude Code desteği).
-- `agent/`: Claude ile otonom URL listesi tarayan ve kapsamlı Türkçe Markdown raporu üreten Python ajanı.
-- `shared/`: Frontend ve Backend arasında paylaşılan TypeScript tipleri.
+- `backend/` — Express API, scanner modules, egress policy, reporting, and SQLite scan history.
+- `frontend/` — Local UI built on React 19 and Vite: URL and body analysis, history, Markdown and JSON export.
+- `mcp-server/` — Stdio server implementing the Model Context Protocol (Cursor, Claude Desktop, Claude Code).
+- `agent/` — Python agent that scans a list of URLs autonomously with Claude and writes a structured Markdown report (report output is in Turkish).
+- `shared/` — TypeScript types shared between frontend and backend.
 
 ---
 
-## Hızlı Başlangıç
+## Quick start
 
-### 1. Yapılandırma
-Örnek ortam dosyasını referans alarak yapılandırmanızı hazırlayın:
-```powershell
-Copy-Item .env.example .env
+Commands below use a POSIX shell. On Windows PowerShell, replace `cp` with `Copy-Item` and `export VAR=value` with `$env:VAR = "value"`.
+
+### 1. Configuration
+
+```bash
+cp .env.example .env
 ```
 
-### 2. Backend Başlatma
-```powershell
+### 2. Backend
+
+```bash
 cd backend
 npm ci
-$env:SECURITY_SCANNER_API_TOKEN = "en-az-32-karakterlik-guvenli-rastgele-token"
-$env:SECURITY_SCANNER_ALLOWED_ORIGINS = "http://127.0.0.1:5173"
+export SECURITY_SCANNER_API_TOKEN="a-secure-random-token-of-at-least-32-characters"
+export SECURITY_SCANNER_ALLOWED_ORIGINS="http://127.0.0.1:5173"
 npm run dev
 ```
 
-### 3. Frontend Web Arayüzü
-```powershell
+### 3. Frontend
+
+```bash
 cd frontend
 npm ci
 npm run dev -- --host 127.0.0.1
 ```
-Tarayıcınızda `http://127.0.0.1:5173` adresine gidin ve API tokenınızı girerek taramaları başlatın.
+
+Open `http://127.0.0.1:5173`, enter your API token, and start scanning.
 
 ---
 
-## MCP Sunucusu (Claude Desktop & Cursor Entegrasyonu)
+## MCP server (Claude Desktop and Cursor)
 
-Security Scanner, LLM tabanlı geliştirme araçlarının doğrudan güvenlik taraması yapabilmesi için yerleşik bir **MCP (Model Context Protocol)** sunucusu içerir.
+The project includes a built-in **Model Context Protocol** server so LLM-based development tools can run security scans directly.
 
-### Sunulan MCP Araçları
-- `scan_url`: URL pasif veya (izinliyse) aktif güvenlik taraması yapar.
-- `scan_body`: Canlı bağlantı olmadan kopyalanan HTTP gövdesini çevrimdışı analiz eder.
-- `list_recent_scans`: Son 30 tarama kaydını ve skorlarını listeler.
-- `get_scan`: Belirli bir taramanın ayrıntılı bulgu dökümünü getirir.
-- `clear_scans`: Tarama geçmişini temizler.
+### Tools exposed
 
-### Claude Desktop / Cursor Konfigürasyonu
-`claude_desktop_config.json` dosyanıza veya Cursor MCP ayarlarına aşağıdaki bloğu ekleyin:
+- `scan_url` — Runs a passive scan of a URL, or an active one if the host is allowlisted.
+- `scan_body` — Analyzes a pasted HTTP body offline, with no network connection.
+- `list_recent_scans` — Lists the last 30 scans and their scores.
+- `get_scan` — Returns the full finding breakdown for one scan.
+- `clear_scans` — Clears scan history.
+
+### Configuration
+
+Add this block to `claude_desktop_config.json` or your Cursor MCP settings:
 
 ```json
 {
   "mcpServers": {
     "security-scanner": {
       "command": "node",
-      "args": ["<PROJE_YOLU>/mcp-server/dist/index.js"],
+      "args": ["<PROJECT_PATH>/mcp-server/dist/index.js"],
       "env": {
-        "SECURITY_SCANNER_API_TOKEN": "en-az-32-karakterlik-guvenli-rastgele-token",
+        "SECURITY_SCANNER_API_TOKEN": "a-secure-random-token-of-at-least-32-characters",
         "SECURITY_SCANNER_BACKEND_URL": "http://127.0.0.1:4310"
       }
     }
@@ -116,63 +125,65 @@ Security Scanner, LLM tabanlı geliştirme araçlarının doğrudan güvenlik ta
 }
 ```
 
-> **Not**: Kullanmadan önce `cd mcp-server && npm ci && npm run build` çalıştırıldığından emin olun.
+> **Note:** run `cd mcp-server && npm ci && npm run build` before first use.
 
 ---
 
-## Python AI Agent (Otonom Analiz)
+## Python AI agent
 
-İsteğe bağlı Python ajanı, bir URL listesini toplu tarayarak Claude ile analiz eder ve yapılandırılmış raporlar üretir:
+The optional agent scans a list of URLs in bulk, analyzes the results with Claude, and produces structured reports:
 
-```powershell
+```bash
 cd agent
-Copy-Item urls.example.txt urls.txt
-# urls.txt dosyasını yetkili hedeflerinizle düzenleyin
+cp urls.example.txt urls.txt
+# edit urls.txt with targets you are authorized to scan
 python -m pip install --require-hashes -r requirements.txt
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
-$env:SECURITY_SCANNER_API_TOKEN = "en-az-32-karakterlik-guvenli-rastgele-token"
+export ANTHROPIC_API_KEY="sk-ant-..."
+export SECURITY_SCANNER_API_TOKEN="a-secure-random-token-of-at-least-32-characters"
 python agent.py
 ```
 
 ---
 
-## Doğrulama ve Testler
+## Tests and verification
 
-Her paketin test ve derleme kontrollerini ilgili dizinde çalıştırabilirsiniz:
+Each package can be checked from its own directory:
 
-```powershell
-# Backend (115+ test & typecheck)
+```bash
+# Backend (115+ tests and typecheck)
 cd backend && npm run typecheck && npm test && npm run build
 
-# Frontend (Vitest & ESLint)
+# Frontend (Vitest and ESLint)
 cd frontend && npm run lint && npm test && npm run build
 
-# MCP Sunucusu
+# MCP server
 cd mcp-server && npm run build -- --noEmit && npm run build
 
-# Python Agent
+# Python agent
 cd agent && python -c "import ast, pathlib; ast.parse(pathlib.Path('agent.py').read_text(encoding='utf-8'))"
 ```
 
 ---
 
-## Repository Yapısı
+## Repository layout
 
 ```text
 .
-├── backend/          # Express API, tarayıcı motorları, güvenlik politikaları ve testler
-├── frontend/         # React 19 + Vite kullanıcı arayüzü
-├── mcp-server/       # Stdio tabanlı Model Context Protocol (MCP) sunucusu
-├── agent/            # Otonom Python analiz ajanı ve örnek hedef listesi
-├── shared/           # Ortak TypeScript tip tanımları
-├── .env.example      # Örnek ortam değişkenleri şablonu
-├── .gitignore        # Sertleştirilmiş Git hariç tutma kuralları
+├── backend/          # Express API, scanner engines, security policies, tests
+├── frontend/         # React 19 + Vite user interface
+├── mcp-server/       # Stdio Model Context Protocol server
+├── agent/            # Autonomous Python analysis agent and sample target list
+├── shared/           # Shared TypeScript type definitions
+├── .env.example      # Environment variable template
+├── .gitignore        # Hardened Git ignore rules
 ├── LICENSE           # GNU Affero General Public License v3.0 (AGPL-3.0)
 └── README.md
 ```
 
+Source comments and test names are written in Turkish.
+
 ---
 
-## Lisans
+## License
 
-Bu proje **GNU Affero General Public License v3.0 (AGPL-3.0)** altında lisanslanmıştır. Ayrıntılar için [LICENSE](LICENSE) dosyasına bakabilirsiniz.
+Released under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See [LICENSE](LICENSE) for details.
