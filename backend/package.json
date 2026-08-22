@@ -9,9 +9,16 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build --silent && node scripts/run-tests.mjs"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "security",
+    "vulnerability-scanner",
+    "passive-recon",
+    "tls-scanner",
+    "mcp-server",
+    "pentest-tool"
+  ],
+  "author": "Onur Eren",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "dependencies": {
     "better-sqlite3": "^12.6.2",

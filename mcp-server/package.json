@@ -2,6 +2,8 @@
   "name": "security-scanner-mcp",
   "version": "1.0.0",
   "description": "Security Scanner MCP Server - Cursor, Claude Desktop, Claude Code entegrasyonu",
+  "author": "Onur Eren",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

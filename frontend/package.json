@@ -1,7 +1,10 @@
 {
-  "name": "frontend",
+  "name": "security-scanner-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Security Scanner React & Vite Web UI",
+  "author": "Onur Eren",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite",
