@@ -4,7 +4,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![CI](https://github.com/Rina48/security-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/Rina48/security-scanner/actions/workflows/ci.yml)
-![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)
+![Node.js](https://img.shields.io/badge/Node.js-24%20ile%20test%20edildi-green.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)
 ![MCP Ready](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-8A2BE2.svg)
 
