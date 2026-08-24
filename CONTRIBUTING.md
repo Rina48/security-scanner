@@ -8,9 +8,9 @@ The repo holds four independent packages plus a shared type module:
 
 | Path | What it is | Runtime |
 | --- | --- | --- |
-| `backend/` | Express API, scanner engines, egress policy, SQLite history | Node.js >= 20 |
-| `frontend/` | React 19 + Vite user interface | Node.js >= 20 |
-| `mcp-server/` | Stdio Model Context Protocol server | Node.js >= 20 |
+| `backend/` | Express API, scanner engines, egress policy, SQLite history | Node.js 24 |
+| `frontend/` | React 19 + Vite user interface | Node.js 24 |
+| `mcp-server/` | Stdio Model Context Protocol server | Node.js 24 |
 | `agent/` | Autonomous Python analysis agent | Python 3.11+ |
 | `shared/` | TypeScript types used by backend and frontend | — |
 
